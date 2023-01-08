@@ -6,6 +6,7 @@ import com.example.fastcampusmysql.domain.post.dto.DailyPostCount;
 import com.example.fastcampusmysql.domain.post.dto.DailyPostCountRequest;
 import com.example.fastcampusmysql.domain.post.entity.Post;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +22,7 @@ import java.sql.ResultSet;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @RequiredArgsConstructor
 @Repository
@@ -43,6 +45,8 @@ public class PostRepository {
                     .memberId(rs.getLong("memberId"))
                     .contents(rs.getString("contents"))
                     .createdDate(rs.getObject("createdDate", LocalDate.class))
+                    .likeCount(rs.getLong("likeCount"))
+                    .version(rs.getLong("version"))
                     .createdAt(rs.getObject("createdAt", LocalDateTime.class))
                     .build();
 
@@ -62,7 +66,18 @@ public class PostRepository {
         var sql = String.format("select * from %s where memberId = :memberId order by %s limit :size offset :offset", TABLE, PageHelper.orderBy(pageable.getSort()));
         var posts = namedParameterJdbcTemplate.query(sql, param, ROW_MAPPER);
         return new PageImpl<>(posts, pageable, getCount(memberId));
+    }
 
+    public Optional<Post> findById(Long postId, Boolean requiredLock) {
+        var sql = String.format("select * from %s where id = :postId", TABLE);
+        if (requiredLock) {
+            sql += " for update";
+        }
+
+        var param = new MapSqlParameterSource().addValue("postId", postId);
+
+        var nullable = namedParameterJdbcTemplate.queryForObject(sql, param, ROW_MAPPER);
+        return Optional.ofNullable(nullable);
     }
 
     private Long getCount(Long memberId) {
@@ -122,7 +137,7 @@ public class PostRepository {
 
     public Post save(Post post) {
         if (post.getId() == null) return insert(post);
-        throw new UnsupportedOperationException("can not update");
+        return update(post);
     }
 
     public void bulkInsert(List<Post> posts) {
@@ -148,8 +163,21 @@ public class PostRepository {
                 .memberId(post.getMemberId())
                 .contents(post.getContents())
                 .createdAt(post.getCreatedAt())
+                .likeCount(post.getLikeCount())
                 .createdDate(post.getCreatedDate())
                 .build();
+    }
 
+    private Post update(Post post) {
+        var sql = String.format("update %s set " +
+                "memberId = :memberId, contents = :contents, createdDate = :createdDate, likeCount = :likeCount, createdAt = :createdAt, version = :version + 1" +
+                " WHERE id = :id and version = :version", TABLE);
+        var param = new BeanPropertySqlParameterSource(post);
+        var updatedCount = namedParameterJdbcTemplate.update(sql, param);
+        if (updatedCount == 0) {
+            throw new RuntimeException("fail");
+        }
+
+        return post;
     }
 }

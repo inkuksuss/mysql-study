@@ -1,8 +1,10 @@
 package com.example.fastcampusmysql.controller;
 
 
+import com.example.fastcampusmysql.application.usecase.CreatePostLikeUsecase;
 import com.example.fastcampusmysql.application.usecase.CreatePostUsecase;
 import com.example.fastcampusmysql.application.usecase.GetTimelinePostsUsecase;
+import com.example.fastcampusmysql.domain.member.dto.PostDto;
 import com.example.fastcampusmysql.domain.post.dto.DailyPostCount;
 import com.example.fastcampusmysql.domain.post.dto.DailyPostCountRequest;
 import com.example.fastcampusmysql.domain.post.dto.PostCommand;
@@ -29,6 +31,7 @@ public class PostController {
     private final PostReadService postReadService;
     private final GetTimelinePostsUsecase getTimelinePostsUsecase;
     private final CreatePostUsecase createPostUsecase;
+    private final CreatePostLikeUsecase postLikeUsecase;
 
     @PostMapping("/")
     public Long create(PostCommand command) {
@@ -46,12 +49,13 @@ public class PostController {
     }
 
     @GetMapping("/members/{memberId}")
-    public Page<Post> getPosts(
+    public Page<PostDto> getPosts(
             @PathVariable Long memberId,
             Pageable pageable
     ) {
         return postReadService.getPosts(memberId, pageable);
     }
+
 
     @GetMapping("/members/{memberId}/by-cursor")
     public PageCursor<Post> getPostsByCursor(
@@ -64,5 +68,20 @@ public class PostController {
     @GetMapping("/members/{memberId}/timeline")
     public PageCursor<Post> getTimeline(@PathVariable Long memberId, CursorRequest cursorRequest) {
         return getTimelinePostsUsecase.executeByTimeline(memberId, cursorRequest);
+    }
+
+    @PostMapping("/{postId}/like/v1")
+    public void likePost(@PathVariable Long postId) {
+        postWriteService.likePost(postId);
+    }
+
+    @PostMapping("/{postId}/like/opt")
+    public void likePostOpt(@PathVariable Long postId) {
+        postWriteService.likePostByOptimisticLock(postId);
+    }
+
+    @PostMapping("/{postId}/like/v2")
+    public void likePostV2(@PathVariable Long postId, @RequestParam Long memberId) {
+        postLikeUsecase.execute(postId, memberId);
     }
 }
